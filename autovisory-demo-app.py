@@ -110,6 +110,9 @@ def get_recommendations_and_analysis(full_context_query):
     FULL CONVERSATION CONTEXT:
     {full_context_query}
 
+    *** CRITICAL INSTRUCTION ON BUDGET INTERPRETATION ***
+    When a user provides a budget, you must interpret it as a target price point, not just a maximum limit. A user with a high budget (e.g., $100,000) is interested in the luxury, performance, or high-end vehicles that fit that price range. Do NOT recommend entry-level or mass-market vehicles to a user with a high budget. Your recommendations should be appropriate for the market segment implied by the budget.
+
     INSTRUCTIONS:
     1.  Analyze the user's needs from the context.
     2.  Select 3 car models from your knowledge that are the best fit.
