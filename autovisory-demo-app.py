@@ -19,9 +19,7 @@ st.set_page_config(
 # API AND MODEL CONFIGURATION
 # ==============================================================================
 try:
-    # Load API Key from Streamlit Secrets
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    # Using Flash for speed, cost-effectiveness, and a large context window.
     model = genai.GenerativeModel('gemini-1.5-flash')
 except Exception:
     st.error("Could not configure Google AI. Have you set the GOOGLE_API_KEY in Streamlit secrets?", icon="🚨")
@@ -30,10 +28,9 @@ except Exception:
 # ==============================================================================
 # DATA LOADING (with Caching for performance)
 # ==============================================================================
-@st.cache_data # Important: Caches the data to avoid reloading on every interaction
+@st.cache_data
 def load_data():
     try:
-        # These are your larger, optimized sample files now
         df_new_us = pd.read_csv('Data/sample_new_us_cars.csv')
         df_used_us = pd.read_csv('Data/sample_used_us_cars.csv')
         df_used_europe = pd.read_csv('Data/sample_used_europe_cars.csv')
@@ -42,38 +39,44 @@ def load_data():
         st.error("Sample data files not found. Please ensure the 'Data' folder with your sample CSVs is in the repository.", icon="🚨")
         return None, None, None
 
-# Load the data. The app will only proceed if the files are found.
 df_new_us_master, df_used_us_master, df_used_europe_master = load_data()
 if df_new_us_master is None:
     st.stop()
 
 
 # ==============================================================================
-# ----------------- YOUR COPIED AI HELPER FUNCTIONS ------------------------
+# ----------------- AI HELPER FUNCTIONS (FINAL VERSION) ----------------------
 # ==============================================================================
 
 def determine_next_action(history, user_query):
     history_str = "\n".join([f"{h['role']}: {h['parts']}" for h in history])
     
-    # NEW, MORE ROBUST PROMPT
+    # FINAL, POLISHED PROMPT WITH SMALL TALK HANDLING
     prompt = f"""
-    You are Autovisory, an expert AI car advisor. Your goal is to classify the user's most recent query into a specific action. The overall conversation is always about cars.
+    You are Autovisory, a helpful and conversational AI car advisor. Your goal is to classify the user's most recent query into a specific action.
 
-    Based on the user's most recent query, determine the primary intent:
+    Based on the user's most recent query, determine the primary intent by following these rules IN ORDER:
 
-    1.  **Clarify:** If the query is vague (e.g., "I need a car"), your action is "clarify".
+    1.  **Small Talk:** If the query is a simple greeting ('hi', 'hello'), farewell ('bye'), expression of gratitude ('thanks', 'thank you'), or other common pleasantries that DO NOT contain a car request, your action is "small_talk". Generate an appropriate, polite response.
+        - Example for "thanks": {{"action": "small_talk", "response": "You're very welcome! Is there anything else I can help you analyze or compare?"}}
+        - Example for "hello": {{"action": "small_talk", "response": "Hello! How can I help you with your car search today?"}}
+
+    2.  **Clarify:** If the query is a vague car-related request (e.g., "I need a car"), your action is "clarify".
         - JSON: {{"action": "clarify", "response": "To give you the best recommendation, I need a little more information. Could you tell me about your budget, primary use, and priorities?"}}
 
-    2.  **Recommend:** If the user provides enough detail for a recommendation OR asks to **modify their previous criteria** (e.g., "what about something cheaper?", "I actually need an SUV", "change my preference to sport cars"), your action is "recommend".
+    3.  **Recommend:** If the user provides details for a recommendation OR asks to modify previous criteria (e.g., "what about something cheaper?", "change my preference to sport cars"), your action is "recommend".
         - JSON: {{"action": "recommend", "response": "Okay, based on your new preferences, I'm finding some options for you..."}}
 
-    3.  **Analyze:** If the user asks for details about ONE specific car model (e.g., "Tell me about the Ford F-150"), your action is "analyze".
+    4.  **Analyze:** If the user asks for details about ONE specific car model, your action is "analyze".
         - JSON: {{"action": "analyze", "response": "Let me pull up the details for that model."}}
 
-    4.  **Compare:** If the user asks to compare TWO OR MORE specific car models (e.g., "Civic vs Corolla"), your action is "compare".
+    5.  **Compare:** If the user asks to compare TWO OR MORE specific car models, your action is "compare".
         - JSON: {{"action": "compare", "response": "Excellent comparison. Let me put the specs side-by-side."}}
+        
+    6.  **Answer General:** If the user asks a general knowledge question about cars (e.g., "What is a hybrid?"), your action is "answer_general".
+        - JSON: {{"action": "answer_general", "response": "That's a great question. Here's an explanation..."}}
 
-    5.  **Reject:** If the query is CLEARLY not about cars (e.g., "What's the weather?"), your action is "reject". If unsure, default to a car-related intent.
+    7.  **Reject:** If the query is CLEARLY not about cars (e.g., "What's the weather?"), your action is "reject".
         - JSON: {{"action": "reject", "response": "I'm designed to only answer questions about cars. Could we stick to that topic?"}}
 
     Conversation History:
@@ -94,16 +97,13 @@ def determine_next_action(history, user_query):
 
 
 def extract_car_models(text):
-    # This regex is designed to be more specific to car models
     pattern = r'(?:\b(?:vs|versus|compare|between|and)\b\s)?([A-Z][a-zA-Z0-9-]+\s(?:[A-Z][a-zA-Z0-9-]+-?)+|[A-Z][a-zA-Z0-9-]+\s[A-Z][a-zA-Z0-9-]+|[A-Z][a-zA-Z0-9-]+)'
     models = re.findall(pattern, text)
-    # Post-processing to remove common words that are not models
     stop_words = {'Compare', 'Between', 'And', 'The', 'A'}
     return [model.strip() for model in models if model.strip() not in stop_words]
 
 
 def get_recommendations_and_analysis(full_context_query):
-    # PROMPT HAS BEEN UPGRADED TO ASK FOR STRUCTURED NUMBERS, NOT STRINGS
     prompt = f"""
     You're an expert AI Car Analyst. Based on the user's request, recommend 3 cars and provide an analysis.
 
@@ -227,16 +227,13 @@ def analyze_specific_car_model(car_model):
 st.title("🚗 Autovisory AI")
 st.caption("Your AI-Powered Car Market Analyst (Live Demo)")
 
-# Initialize chat history
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": "Hello! I'm Autovisory. Ask me to recommend, compare, or analyze a car."}]
 
-# Display chat messages
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# React to user input
 if prompt := st.chat_input("What would you like to know?"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -244,15 +241,14 @@ if prompt := st.chat_input("What would you like to know?"):
 
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            # Prepare history for the AI model
             gemini_history = [{"role": "user" if msg["role"] == "user" else "model", "parts": [msg["content"]]} for msg in st.session_state.messages]
             
             action_data = determine_next_action(gemini_history, prompt)
             action = action_data.get("action", "error")
             response_content = ""
 
-            # This logic block handles the different AI actions
-            if action in ["reject", "clarify", "answer_general"]:
+            # UPDATED LOGIC BLOCK TO HANDLE THE NEW 'small_talk' ACTION
+            if action in ["reject", "clarify", "answer_general", "small_talk"]:
                 response_content = action_data.get("response", "I'm not sure how to respond. Please try rephrasing.")
             
             elif action == "recommend":
@@ -264,13 +260,11 @@ if prompt := st.chat_input("What would you like to know?"):
                         response_content += f"\n### 🚗 {r.get('make')} {r.get('model')}\n"
                         response_content += f"- **Summary**: {r.get('summary', 'N/A')}\n"
                         
-                        # NEW, ROBUST PRICE FORMATTING LOGIC
                         price_info = r.get('price_range', {})
                         min_p = price_info.get('min_price', 0)
                         max_p = price_info.get('max_price', 0)
                         type_p = price_info.get('type', 'N/A')
                         
-                        # Use Python's f-string formatting to add commas automatically
                         if min_p > 0 and max_p > 0:
                             response_content += f"- **Estimated Price**: ${min_p:,} - ${max_p:,} ({type_p})\n"
                         else:
